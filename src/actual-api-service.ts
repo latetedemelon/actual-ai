@@ -62,33 +62,23 @@ class ActualApiService implements ActualApiServiceI {
     }
 
     if (this.fs.existsSync(this.lockPath)) {
+      let parsed: { pid?: number; startedAt?: string } | null = null;
       try {
-        const raw = this.fs.readFileSync(this.lockPath, 'utf8');
-        const parsed = JSON.parse(raw) as { pid?: number; startedAt?: string };
-        const pid = parsed?.pid;
-        if (typeof pid === 'number') {
-          try {
-            process.kill(pid, 0);
-            throw new Error(
-              `Another actual-ai run appears active (pid=${pid}). `
-              + `Refusing to use shared dataDir: ${this.dataDir}`,
-            );
-          } catch (error: unknown) {
-            if (isErrnoException(error) && error.code === 'ESRCH') {
-              // Stale lock from a crashed process; remove it.
-              this.fs.unlinkSync(this.lockPath);
-            } else if (error instanceof Error) {
-              // process.kill threw, but it's not ESRCH; rethrow.
-              throw error;
-            }
-          }
-        } else {
-          // Unparseable/stale lock; remove it.
-          this.fs.unlinkSync(this.lockPath);
-        }
-      } catch (e) {
-        // If anything goes wrong reading the lock, fail safe.
-        throw e instanceof Error ? e : new Error('Failed to read dataDir lock');
+        parsed = JSON.parse(this.fs.readFileSync(this.lockPath, 'utf8')) as {
+          pid?: number; startedAt?: string;
+        };
+      } catch {
+        // Unparseable lock; treat as stale.
+        parsed = null;
+      }
+
+      if (parsed === null || this.isStaleLock(parsed)) {
+        this.fs.unlinkSync(this.lockPath);
+      } else {
+        throw new Error(
+          `Another actual-ai run appears active (pid=${parsed.pid}). `
+          + `Refusing to use shared dataDir: ${this.dataDir}`,
+        );
       }
     }
 
@@ -98,6 +88,42 @@ class ActualApiService implements ActualApiServiceI {
       this.lockFd,
       JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }),
     );
+  }
+
+  private isStaleLock(parsed: { pid?: number; startedAt?: string }): boolean {
+    const { pid, startedAt } = parsed;
+
+    // Without a numeric pid we can't verify ownership; treat as stale.
+    if (typeof pid !== 'number') {
+      return true;
+    }
+
+    // If the lock was written before the current process started, it belongs to
+    // an earlier run that is no longer alive — even if some live process now
+    // happens to own that PID. This is the common case in a restarting
+    // container, where a crashed run leaves a lock and the restarted process
+    // gets the same PID in a fresh PID namespace, defeating the liveness probe
+    // below. Without this check the service would refuse to start forever.
+    if (startedAt) {
+      const lockStartedAt = new Date(startedAt).getTime();
+      const processStartedAt = Date.now() - process.uptime() * 1000;
+      if (!Number.isNaN(lockStartedAt) && lockStartedAt < processStartedAt) {
+        return true;
+      }
+    }
+
+    // Otherwise probe liveness: if no process owns the PID, the lock is stale
+    // (a crashed run that never released it).
+    try {
+      process.kill(pid, 0);
+    } catch (error: unknown) {
+      if (isErrnoException(error) && error.code === 'ESRCH') {
+        return true;
+      }
+      // EPERM (PID owned by another user) → process exists; treat as active.
+    }
+
+    return false;
   }
 
   private releaseDataDirLock() {
