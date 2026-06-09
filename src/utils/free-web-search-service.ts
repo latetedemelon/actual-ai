@@ -61,7 +61,7 @@ export default class FreeWebSearchService {
   private async fetchUrl(url: string, retries = 3): Promise<string> {
     // console.debug('[SearchService] Fetching URL:', url);
     return new Promise((resolve, reject) => {
-      const attempt = () => {
+      const attempt = (remainingRetries: number) => {
         https.get(url, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -70,8 +70,8 @@ export default class FreeWebSearchService {
           },
         }, (res) => {
           // console.debug(`[SearchService] HTTP ${res.statusCode} for ${url}`);
-          if (res.statusCode === 202 && retries > 0) {
-            setTimeout(attempt, 1000);
+          if (res.statusCode === 202 && remainingRetries > 0) {
+            setTimeout(() => attempt(remainingRetries - 1), 1000);
             return;
           }
           if (res.statusCode !== 200) {
@@ -92,7 +92,7 @@ export default class FreeWebSearchService {
           reject(err);
         });
       };
-      attempt();
+      attempt(retries);
     });
   }
 

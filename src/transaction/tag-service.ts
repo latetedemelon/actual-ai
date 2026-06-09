@@ -1,6 +1,12 @@
 const LEGACY_NOTES_NOT_GUESSED = 'actual-ai could not guess this category';
 const LEGACY_NOTES_GUESSED = 'actual-ai guessed this category';
 
+// Tags are user-configurable and interpolated into RegExp, so escape any
+// characters that would otherwise be interpreted as regex metacharacters.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 class TagService {
   private readonly notGuessedTag: string;
 
@@ -28,14 +34,23 @@ class TagService {
   }
 
   public clearPreviousTags(notes: string): string {
-    return notes
-      .replace(new RegExp(`\\s*${this.guessedTag}`, 'g'), '')
-      .replace(new RegExp(`\\s*${this.notGuessedTag}`, 'g'), '')
-      .replace(new RegExp(`\\s*\\|\\s*${LEGACY_NOTES_NOT_GUESSED}`, 'g'), '')
-      .replace(new RegExp(`\\s*\\|\\s*${LEGACY_NOTES_GUESSED}`, 'g'), '')
-      .replace(new RegExp(`\\s*${LEGACY_NOTES_GUESSED}`, 'g'), '')
-      .replace(new RegExp(`\\s*${LEGACY_NOTES_NOT_GUESSED}`, 'g'), '')
-      .replace(/-miss(?= #actual-ai)/g, '')
+    // Remove the more specific (longer) tag first. The not-guessed tag is
+    // typically a superset of the guessed tag (e.g. "#actual-ai-miss" contains
+    // "#actual-ai"), so stripping the shorter one first would eat part of the
+    // longer tag and leave a dangling fragment (e.g. "-miss").
+    const tags = [this.guessedTag, this.notGuessedTag]
+      .sort((a, b) => b.length - a.length);
+
+    let result = notes;
+    tags.forEach((tag) => {
+      result = result.replace(new RegExp(`\\s*${escapeRegExp(tag)}`, 'g'), '');
+    });
+
+    return result
+      .replace(new RegExp(`\\s*\\|\\s*${escapeRegExp(LEGACY_NOTES_NOT_GUESSED)}`, 'g'), '')
+      .replace(new RegExp(`\\s*\\|\\s*${escapeRegExp(LEGACY_NOTES_GUESSED)}`, 'g'), '')
+      .replace(new RegExp(`\\s*${escapeRegExp(LEGACY_NOTES_GUESSED)}`, 'g'), '')
+      .replace(new RegExp(`\\s*${escapeRegExp(LEGACY_NOTES_NOT_GUESSED)}`, 'g'), '')
       .trim();
   }
 
