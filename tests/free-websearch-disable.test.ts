@@ -26,10 +26,10 @@ describe('ToolService freeWebSearch disable-on-403', () => {
     const execute = freeWebSearchTool.execute.bind(freeWebSearchTool);
 
     await expect(
-      execute({ query: 'Example' }, { toolCallId: 't1', messages: [] } as never),
+      execute({ query: 'Example' }, { toolCallId: 't1', messages: [] }),
     ).resolves.toBe('Free web search is temporarily unavailable (HTTP 403).');
     await expect(
-      execute({ query: 'Another Query' }, { toolCallId: 't2', messages: [] } as never),
+      execute({ query: 'Another Query' }, { toolCallId: 't2', messages: [] }),
     ).resolves.toBe('Free web search is temporarily unavailable (HTTP 403).');
 
     expect(searchSpy).toHaveBeenCalledTimes(1);

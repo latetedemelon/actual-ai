@@ -31,10 +31,10 @@ describe('ToolService caching', () => {
 
     // Call tool twice with identical query; underlying search should execute once.
     await expect(
-      execute({ query: 'Example' }, { toolCallId: 't1', messages: [] } as never),
+      execute({ query: 'Example' }, { toolCallId: 't1', messages: [] }),
     ).resolves.toBe('SEARCH RESULTS:\n[Source 1] T');
     await expect(
-      execute({ query: 'Example' }, { toolCallId: 't2', messages: [] } as never),
+      execute({ query: 'Example' }, { toolCallId: 't2', messages: [] }),
     ).resolves.toBe('SEARCH RESULTS:\n[Source 1] T');
     expect(searchSpy).toHaveBeenCalledTimes(1);
   });
@@ -59,9 +59,9 @@ describe('ToolService caching', () => {
     }
     const execute = freeWebSearchTool.execute.bind(freeWebSearchTool);
 
-    await execute({ query: 'Example' }, { toolCallId: 't1', messages: [] } as never);
+    await execute({ query: 'Example' }, { toolCallId: 't1', messages: [] });
     nowSpy.mockReturnValue(1_000 + (30 * 60 * 1000) + 1);
-    await execute({ query: 'Example' }, { toolCallId: 't2', messages: [] } as never);
+    await execute({ query: 'Example' }, { toolCallId: 't2', messages: [] });
 
     expect(searchSpy).toHaveBeenCalledTimes(2);
   });
@@ -86,9 +86,9 @@ describe('ToolService caching', () => {
     // Fill up 201 unique entries (max is 200), forcing oldest eviction.
     await Array.from({ length: 201 }, (_, i) => i).reduce(async (prev, i) => {
       await prev;
-      await execute({ query: `Example ${i}` }, { toolCallId: `t${i}`, messages: [] } as never);
+      await execute({ query: `Example ${i}` }, { toolCallId: `t${i}`, messages: [] });
     }, Promise.resolve());
-    await execute({ query: 'Example 0' }, { toolCallId: 't-final', messages: [] } as never);
+    await execute({ query: 'Example 0' }, { toolCallId: 't-final', messages: [] });
 
     expect(searchSpy).toHaveBeenCalledTimes(202);
   });
