@@ -74,12 +74,26 @@ class CategorySuggester {
             throw new Error(`Missing groupId for category ${suggestion.name}`);
           }
 
-          const newCategoryId = await this.actualApiService.createCategory(
-            suggestion.name,
-            groupId,
+          // The suggested category may already exist in the target group: the LLM
+          // sometimes proposes a name that's already present, and Actual throws
+          // "category already exists in group" on a duplicate insert (which would
+          // otherwise crash the run). Reuse the existing category instead.
+          const existingGroup = categoryGroups.find((g) => g.id === groupId);
+          const existingCategory = existingGroup?.categories?.find(
+            (c) => c.name.toLowerCase() === suggestion.name.toLowerCase(),
           );
 
-          console.log(`Created new category "${suggestion.name}" with ID ${newCategoryId}`);
+          let newCategoryId: string;
+          if (existingCategory) {
+            newCategoryId = existingCategory.id;
+            console.log(`Reusing existing category "${suggestion.name}" with ID ${newCategoryId}`);
+          } else {
+            newCategoryId = await this.actualApiService.createCategory(
+              suggestion.name,
+              groupId,
+            );
+            console.log(`Created new category "${suggestion.name}" with ID ${newCategoryId}`);
+          }
 
           // Use Promise.all with map for nested async operations
           await Promise.all(
