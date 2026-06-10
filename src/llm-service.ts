@@ -100,16 +100,18 @@ export default class LlmService implements LlmServiceI {
 
       if (this.isFallbackMode) {
         const response = await this.askUsingFallbackModel(prompt);
-        const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-        if (!uuidRegex.test(response)) {
-          console.warn('If you are using ollama and you see it all the time, check the ollama api logs.'
-              + 'Maybe you need to use bigger context window');
-          throw new Error(`Could not foud category in LLM response: ${response}`);
+        try {
+          // Parse the fallback response the same way as the primary path so providers
+          // like ollama can return structured JSON — new categories, rule matches, or a
+          // bare category id/UUID — instead of only ever a UUID.
+          return parseLlmResponse(response);
+        } catch {
+          console.warn(
+            'Could not parse a category from the LLM response. If you are using ollama and '
+            + 'see this frequently, check the ollama API logs — you may need a larger context window.',
+          );
+          throw new Error(`Could not find category in LLM response: ${response}`);
         }
-        return {
-          type: 'existing',
-          categoryId: response,
-        };
       }
 
       return this.rateLimiter.executeWithRateLimiting(this.provider, async () => {
@@ -164,7 +166,10 @@ export default class LlmService implements LlmServiceI {
             abortSignal: controller.signal,
           });
 
-          return text.replace(/(\r\n|\n|\r|"|')/gm, '');
+          // Return the raw text; parseLlmResponse handles trimming, code fences,
+          // quoted ids, and JSON. Stripping quotes/newlines here would corrupt any
+          // JSON object the model returns.
+          return text.trim();
         } finally {
           clearTimeout(timer);
         }
